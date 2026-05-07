@@ -1,0 +1,56 @@
+# ── Dataset ─────────────────────────────────────────────────────────────
+dataset_name: person-in-wifi-3d
+
+# Absolute path to the Person-in-WiFi-3D root directory.
+# Expected layout:
+#   {dataset_root}/
+#     train_data/
+#       train_data_list.txt
+#       csi/        *.mat   (3, 3, 30, 20)
+#       keypoint/   *.npy   (n_persons, 14, 3)
+#     test_data/
+#       test_data_list.txt
+#       csi/
+#       keypoint/
+dataset_root: VST-pose\Person-in-WiFi-3D
+
+# ── Multi-person settings ───────────────────────────────────────────────
+# Max persons per sample.  Samples with fewer people are zero-padded and
+# excluded from the loss via a per-slot mask.
+max_persons: 3
+
+# ── Model architecture ──────────────────────────────────────────────────
+# Number of WiFi packets per CSI segment — must match the dataset value.
+num_packets: 20
+
+# Encoder output channels; also the joint-proxy channel count in the
+# Transformer.  Set equal to NUM_JOINTS (14) to mirror the MM-Fi convention.
+feature_dim: 14
+
+# Feature dimension per channel inside the Transformer blocks.
+dim: 128
+
+# ── Loss ────────────────────────────────────────────────────────────────
+# Weight on the speed auxiliary loss.
+# Keep at 0.0: Person-in-WiFi 3D provides a single per-segment pose ground
+# truth, so a velocity target is unavailable.
+# Set > 0.0 only if you add a dataloader that returns consecutive-frame pairs.
+alpha: 0.0
+
+# ── Data loading ────────────────────────────────────────────────────────
+train_loader:
+  batch_size: 64
+  # Set num_workers to 0 on Windows if multiprocessing errors occur.
+  num_workers: 4
+
+test_loader:
+  batch_size: 32
+  num_workers: 4
+
+# ── Training ────────────────────────────────────────────────────────────
+init_rand_seed: 42
+base_learning_rate: 0.0001
+total_epoch: 50
+
+# ── Output ──────────────────────────────────────────────────────────────
+save_path: pose_weights

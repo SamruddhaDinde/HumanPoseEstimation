@@ -8,3 +8,8 @@ wheels/
 
 # Virtual environments
 .venv
+
+*.zip
+
+VST-pose/Person-in-WiFi-3D/
+Person-in-WiFi-3D.zip

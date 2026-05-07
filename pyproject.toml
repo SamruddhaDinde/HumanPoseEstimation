@@ -6,4 +6,10 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi[standard]>=0.136.1",
+    "h5py>=3.16.0",
+    "scikit-learn>=1.8.0",
+    "scipy>=1.17.1",
+    "tensorboard>=2.20.0",
+    "torch>=2.11.0",
+    "tqdm>=4.67.3",
 ]
