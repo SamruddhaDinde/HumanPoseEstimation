@@ -3,6 +3,13 @@
 Run from VST-Pose/VST-Pose/:
     python Train_PiW3D.py --config_file config/config_piw3d.yaml
 
+Single-person mode
+------------------
+When ``single_person_only: true`` is set in the config (and ``max_persons: 1``),
+the dataloader filters out multi-person samples.  This restricts VST-Pose to
+single-person scenarios, enabling a direct comparison against the
+Person-in-WiFi 3D paper's 1-person benchmark of 91.7 mm MPJPE.
+
 Multi-person handling
 ---------------------
 Each batch contains padded keypoint tensors of shape (B, max_persons, 14, 3)
@@ -20,10 +27,9 @@ consecutive-frame pose pairs.
 
 Evaluation
 ----------
-MPJPE and PA-MPJPE are computed over all valid persons in the batch by
-concatenating unpadded rows across the batch dimension.  PCK uses the
-right-shoulder → left-hip distance as the scale factor (joints 6 and 4 in
-the 14-joint skeleton), matching the convention in utils.py.
+MPJPE and PA-MPJPE are computed in millimetres (ground-truth coordinates are
+stored in metres and multiplied by 1000 before the metric call).  PCK uses a
+joint-order-independent bbox-diagonal scale factor — see ``utils.py``.
 """
 
 alpha = 0.0   # speed-loss weight — keep 0.0 until velocity GT is available
@@ -115,27 +121,35 @@ if __name__ == '__main__':
 
     setup_seed(config.get('init_rand_seed', 42))
 
-    dataset_root = config['dataset_root']
-    max_persons  = config.get('max_persons', 3)
-    num_packets  = config.get('num_packets', 20)
-    feature_dim  = config.get('feature_dim', 14)
-    dim          = config.get('dim', 128)
+    dataset_root       = config['dataset_root']
+    max_persons        = config.get('max_persons', 3)
+    num_packets        = config.get('num_packets', 20)
+    feature_dim        = config.get('feature_dim', 14)
+    dim                = config.get('dim', 128)
+    single_person_only = config.get('single_person_only', False)
+
+    if single_person_only:
+        print(f"Mode: SINGLE-PERSON ONLY (max_persons={max_persons})")
+    else:
+        print(f"Mode: MULTI-PERSON (max_persons={max_persons})")
 
     # ── Dataloaders ──────────────────────────────────────────────────
     train_loader = make_piw3d_dataloader(
-        data_root   = dataset_root,
-        split       = 'train',
-        batch_size  = config['train_loader']['batch_size'],
-        num_workers = config['train_loader'].get('num_workers', 4),
-        max_persons = max_persons,
+        data_root          = dataset_root,
+        split              = 'train',
+        batch_size         = config['train_loader']['batch_size'],
+        num_workers        = config['train_loader'].get('num_workers', 4),
+        max_persons        = max_persons,
+        single_person_only = single_person_only,
     )
     test_loader = make_piw3d_dataloader(
-        data_root   = dataset_root,
-        split       = 'test',
-        batch_size  = config['test_loader']['batch_size'],
-        num_workers = config['test_loader'].get('num_workers', 4),
-        max_persons = max_persons,
-        shuffle     = False,
+        data_root          = dataset_root,
+        split              = 'test',
+        batch_size         = config['test_loader']['batch_size'],
+        num_workers        = config['test_loader'].get('num_workers', 4),
+        max_persons        = max_persons,
+        shuffle            = False,
+        single_person_only = single_person_only,
     )
 
     # ── Device ───────────────────────────────────────────────────────
@@ -236,11 +250,16 @@ if __name__ == '__main__':
                 valid_pred, valid_gt = extract_valid_persons(pred_np, gt_np, mask_np)
 
                 if valid_pred.shape[0] > 0:
-                    mpjpe, pampjpe, _, _ = calulate_error(valid_pred, valid_gt, align=False)
+                    # Convert metres → millimetres for reporting.
+                    # Ground-truth coordinates in PiW3D are stored in metres.
+                    valid_pred_mm = valid_pred * 1000.0
+                    valid_gt_mm   = valid_gt   * 1000.0
+                    mpjpe, pampjpe, _, _ = calulate_error(valid_pred_mm, valid_gt_mm, align=False)
                     mpjpe_list  += mpjpe.tolist()
                     pampjpe_list += pampjpe.tolist()
 
-                    # PCK expects (N, 3, 14) — permute last two dims
+                    # PCK is scale-invariant — use original (metre) values.
+                    # PCK expects (N, 3, 14) — permute last two dims.
                     vp_pck = valid_pred.transpose(0, 2, 1)   # (N, 3, 14)
                     vg_pck = valid_gt.transpose(0, 2, 1)
                     for i, thr in enumerate([0.5, 0.4, 0.3, 0.2, 0.1]):

@@ -61,54 +61,68 @@ def infonce_loss(batch_data, temperature=0.5):
     return loss
 
 
-def compute_pck_pckh(dt_kpts,gt_kpts,thr,align=False,dataset='mmfi-csi'):
+def compute_pck_pckh(dt_kpts, gt_kpts, thr, align=False, dataset='mmfi-csi'):
     """
-    pck指标计算
-    :param dt_kpts:算法检测输出的估计结果,shape=[n,h,w]=[行人数，２，关键点个数]
-    :param gt_kpts: groundtruth人工标记结果,sh
-    ape=[n,h,w]
-    :param refer_kpts: 尺度因子，用于预测点与groundtruth的欧式距离的scale。
-    　　　　　　　　　　　pck指标：躯干直径，左肩点－右臀点的欧式距离；
-    　　　　　　　　　　　pckh指标：头部长度，头部rect的对角线欧式距离；
-    :return: 相关指标
+    PCK metric.
+
+    :param dt_kpts: predictions, shape = [n, h, w] = [n_persons, 3, n_keypoints]
+    :param gt_kpts: ground truth,  shape = [n, h, w]
+    :param thr:    threshold (fraction of the per-sample scale factor)
+    :param align:  if True, align predicted-hip with GT-hip before scoring
+    :param dataset: scale-factor convention to use
+
+    Scale-factor conventions:
+      * 'mmfi-csi'           : right-shoulder → left-hip (joints 5 & 12)
+      * 'person-in-wifi-3d'  : bbox diagonal of all GT joints (joint-order
+                               independent — robust against unknown skeleton
+                               orderings)
+      * 'wipose'             : right-shoulder → left-hip (joints 5 & 8)
     """
-    dt=np.array(dt_kpts)
-    gt=np.array(gt_kpts)
+    dt = np.array(dt_kpts)
+    gt = np.array(gt_kpts)
 
     if align == True:
-        dt = dt.transpose(0,2,1)
-        gt = gt.transpose(0,2,1)
-        preds_hip = dt[:, 0, :]  # (batch_size, 3)
-        gts_hip = gt[:, 0, :]  # (batch_size, 3)
-        # Compute the offset to align the hips
-        offset = gts_hip - preds_hip  # (batch_size, 3)
-        # Expand the offset to all joints and apply the translation
-        dt = dt + offset[:, None, :]  # Broadcasting the offset to all joints (batch_size, num_joints, 3)
-        dt = dt.transpose(0,2,1)
-        gt = gt.transpose(0,2,1)
+        dt = dt.transpose(0, 2, 1)
+        gt = gt.transpose(0, 2, 1)
+        preds_hip = dt[:, 0, :]
+        gts_hip   = gt[:, 0, :]
+        offset    = gts_hip - preds_hip
+        dt        = dt + offset[:, None, :]
+        dt        = dt.transpose(0, 2, 1)
+        gt        = gt.transpose(0, 2, 1)
 
-    assert(dt.shape[0]==gt.shape[0])
-    kpts_num=gt.shape[2] #keypoints
-    ped_num=gt.shape[0] #batch_size
-    #compute dist
-    if dataset=='mmfi-csi':
-        scale=np.sqrt(np.sum(np.square(gt[:,:,5]-gt[:,:,12]),1)) #right shoulder--left hip
-    elif dataset=='person-in-wifi-3d':
-        scale=np.sqrt(np.sum(np.square(gt[:,:,6]-gt[:,:,4]),1)) #right shoulder--left hip
-    elif dataset=='wipose':
-        scale=np.sqrt(np.sum(np.square(gt[:,:,5]-gt[:,:,8]),1)) #right shoulder--left hip
-    dist=np.sqrt(np.sum(np.square(dt-gt),1))/np.tile(scale,(gt.shape[2],1)).T
-    #compute pck
-    pck = np.zeros(gt.shape[2]+1)
+    assert dt.shape[0] == gt.shape[0]
+    kpts_num = gt.shape[2]   # keypoints
+
+    # ── Scale factor per sample ─────────────────────────────────────────
+    if dataset == 'mmfi-csi':
+        scale = np.sqrt(np.sum(np.square(gt[:, :, 5] - gt[:, :, 12]), 1))
+    elif dataset == 'person-in-wifi-3d':
+        # Bbox-diagonal scale: joint-order independent.
+        # gt has shape (N, 3, num_joints) — min/max along the joint axis.
+        coord_min = gt.min(axis=2)   # (N, 3)
+        coord_max = gt.max(axis=2)   # (N, 3)
+        scale     = np.sqrt(np.sum(np.square(coord_max - coord_min), axis=1))
+    elif dataset == 'wipose':
+        scale = np.sqrt(np.sum(np.square(gt[:, :, 5] - gt[:, :, 8]), 1))
+
+    # Avoid divide-by-zero on degenerate samples
+    scale = np.where(scale > 1e-8, scale, 1e-8)
+
+    # Per-joint Euclidean distance, normalised by per-sample scale
+    dist = np.sqrt(np.sum(np.square(dt - gt), 1)) / np.tile(scale, (gt.shape[2], 1)).T
+
+    # ── PCK output: (num_joints + 1,) — last entry is the overall mean ──
+    pck = np.zeros(gt.shape[2] + 1)
     for kpt_idx in range(kpts_num):
-        pck[kpt_idx] = 100*np.mean(dist[:,kpt_idx] <= thr)
-        # compute average pck
-    if dataset=='mmfi-csi':
-        pck[17] = 100*np.mean(dist <= thr)
-    elif dataset=='person-in-wifi-3d':
-        pck[14] = 100*np.mean(dist <= thr)
-    elif dataset=='wipose':
-        pck[18] = 100*np.mean(dist <= thr)
+        pck[kpt_idx] = 100 * np.mean(dist[:, kpt_idx] <= thr)
+
+    if dataset == 'mmfi-csi':
+        pck[17] = 100 * np.mean(dist <= thr)
+    elif dataset == 'person-in-wifi-3d':
+        pck[14] = 100 * np.mean(dist <= thr)
+    elif dataset == 'wipose':
+        pck[18] = 100 * np.mean(dist <= thr)
     return pck
 
 
@@ -127,8 +141,6 @@ def compute_similarity_transform(X, Y, compute_optimal_scale=False):
         b: scaling
         c: translation
     """
-    # import numpy as np
-
     muX = X.mean(0)
     muY = Y.mean(0)
 

@@ -10,6 +10,8 @@ wheels/
 .venv
 
 *.zip
+*.pth
 
 VST-pose/Person-in-WiFi-3D/
 Person-in-WiFi-3D.zip
+VST-pose/pose_weights/person-in-wifi-3d

@@ -105,17 +105,28 @@ class PersonInWiFi3DDataset(Dataset):
 
     Keypoints are zero-padded to ``max_persons`` rows.  A float mask of
     shape (max_persons,) marks which rows are real (1.0) vs padding (0.0).
+
+    If ``single_person_only`` is True, samples with more than one person are
+    filtered out at construction time (used for VST-Pose comparison runs
+    where the model is restricted to single-person scenarios).
     """
 
     NUM_JOINTS = 14
     # (TX, RX, subcarriers, packets) – native shape in the .mat files
     CSI_NATIVE_SHAPE = (3, 3, 30, 20)
 
-    def __init__(self, data_root: str, split: str = 'train', max_persons: int = 3):
+    def __init__(
+        self,
+        data_root: str,
+        split: str = 'train',
+        max_persons: int = 3,
+        single_person_only: bool = False,
+    ):
         assert split in ('train', 'test'), "split must be 'train' or 'test'"
         self.data_root = data_root
         self.split = split
         self.max_persons = max_persons
+        self.single_person_only = single_person_only
 
         split_dir = 'train_data' if split == 'train' else 'test_data'
         self.split_path = os.path.join(data_root, split_dir)
@@ -123,6 +134,18 @@ class PersonInWiFi3DDataset(Dataset):
         list_file = os.path.join(self.split_path, f'{split}_data_list.txt')
         with open(list_file, 'r') as f:
             self.sample_names = [ln.strip() for ln in f if ln.strip()]
+
+        # ── Optional single-person filter ──────────────────────────────
+        if self.single_person_only:
+            before = len(self.sample_names)
+            self.sample_names = [
+                n for n in self.sample_names if self._parse_n_persons(n) == 1
+            ]
+            after = len(self.sample_names)
+            print(
+                f"[{split}] single_person_only filter: kept {after} / {before} "
+                f"samples ({100.0 * after / max(before, 1):.1f}%)"
+            )
 
     # ------------------------------------------------------------------
     def __len__(self):
@@ -182,19 +205,27 @@ def make_piw3d_dataloader(
     num_workers: int = 4,
     max_persons: int = 3,
     shuffle=None,
+    single_person_only: bool = False,
 ) -> DataLoader:
     """Build a DataLoader for Person-in-WiFi 3D.
 
     Args:
-        data_root:   Path to the ``Person-in-WiFi-3D`` root directory.
-        split:       ``'train'`` or ``'test'``.
-        batch_size:  Samples per batch.
-        num_workers: Worker processes for data loading.
-                     On Windows set to 0 if multiprocessing errors occur.
-        max_persons: Maximum persons per sample (pads shorter ones).
-        shuffle:     Defaults to True for train, False for test.
+        data_root:          Path to the ``Person-in-WiFi-3D`` root directory.
+        split:              ``'train'`` or ``'test'``.
+        batch_size:         Samples per batch.
+        num_workers:        Worker processes for data loading.
+                            On Windows set to 0 if multiprocessing errors occur.
+        max_persons:        Maximum persons per sample (pads shorter ones).
+        shuffle:            Defaults to True for train, False for test.
+        single_person_only: If True, only samples with exactly 1 person are
+                            included.  Used for restricted VST-Pose runs.
     """
-    dataset = PersonInWiFi3DDataset(data_root, split=split, max_persons=max_persons)
+    dataset = PersonInWiFi3DDataset(
+        data_root,
+        split=split,
+        max_persons=max_persons,
+        single_person_only=single_person_only,
+    )
     if shuffle is None:
         shuffle = (split == 'train')
     loader = DataLoader(

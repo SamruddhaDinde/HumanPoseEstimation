@@ -12,12 +12,18 @@ dataset_name: person-in-wifi-3d
 #       test_data_list.txt
 #       csi/
 #       keypoint/
-dataset_root: VST-pose\Person-in-WiFi-3D
+dataset_root: /workspace/Person-in-WiFi-3D
 
 # ── Multi-person settings ───────────────────────────────────────────────
-# Max persons per sample.  Samples with fewer people are zero-padded and
-# excluded from the loss via a per-slot mask.
-max_persons: 3
+# Restricted to single-person scenarios for fair VST-Pose comparison.
+# VST-Pose was originally designed for single-person sequential pose
+# estimation on MMFi.  Person-in-WiFi 3D's multi-person handling requires
+# Hungarian matching (see PiW3D paper, CVPR 2024), which VST-Pose does not
+# implement.  We therefore restrict to single-person samples to enable a
+# direct numerical comparison against the paper's 1-person benchmark
+# (91.7 mm MPJPE).
+max_persons: 1
+single_person_only: true
 
 # ── Model architecture ──────────────────────────────────────────────────
 # Number of WiFi packets per CSI segment — must match the dataset value.
