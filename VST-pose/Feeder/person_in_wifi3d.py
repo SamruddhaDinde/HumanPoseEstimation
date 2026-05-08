@@ -121,31 +121,76 @@ class PersonInWiFi3DDataset(Dataset):
         split: str = 'train',
         max_persons: int = 3,
         single_person_only: bool = False,
+        val_fraction: float = 0.0,
+        val_seed: int = 42,
     ):
-        assert split in ('train', 'test'), "split must be 'train' or 'test'"
+        """
+        Args:
+            data_root:          Path to the Person-in-WiFi-3D root directory.
+            split:              'train', 'val', or 'test'.
+                                'train' and 'val' both read from train_data_list.txt
+                                and are split deterministically by val_fraction.
+                                'test' reads test_data_list.txt as-is.
+            max_persons:        Pad / truncate poses to this many slots.
+            single_person_only: If True, filter to samples with exactly 1 person.
+            val_fraction:       Fraction of the training list to hold out as the
+                                validation set (0.0 disables splitting — train
+                                uses the full list, val raises an error).
+            val_seed:           Random seed for the deterministic train/val split.
+                                Same seed → identical split across runs.
+        """
+        assert split in ('train', 'val', 'test'), \
+            "split must be 'train', 'val', or 'test'"
+        if split == 'val' and val_fraction <= 0.0:
+            raise ValueError(
+                "split='val' requested but val_fraction=0.0 — set val_fraction > 0 "
+                "to enable a held-out validation set."
+            )
+
         self.data_root = data_root
         self.split = split
         self.max_persons = max_persons
         self.single_person_only = single_person_only
 
-        split_dir = 'train_data' if split == 'train' else 'test_data'
-        self.split_path = os.path.join(data_root, split_dir)
+        # 'train' and 'val' both come from the train_data list; 'test' from test_data.
+        list_split_dir = 'test_data' if split == 'test' else 'train_data'
+        list_split_name = 'test' if split == 'test' else 'train'
+        self.split_path = os.path.join(data_root, list_split_dir)
 
-        list_file = os.path.join(self.split_path, f'{split}_data_list.txt')
+        list_file = os.path.join(self.split_path, f'{list_split_name}_data_list.txt')
         with open(list_file, 'r') as f:
-            self.sample_names = [ln.strip() for ln in f if ln.strip()]
+            all_names = [ln.strip() for ln in f if ln.strip()]
 
         # ── Optional single-person filter ──────────────────────────────
         if self.single_person_only:
-            before = len(self.sample_names)
-            self.sample_names = [
-                n for n in self.sample_names if self._parse_n_persons(n) == 1
-            ]
-            after = len(self.sample_names)
+            before = len(all_names)
+            all_names = [n for n in all_names if self._parse_n_persons(n) == 1]
+            after = len(all_names)
             print(
                 f"[{split}] single_person_only filter: kept {after} / {before} "
                 f"samples ({100.0 * after / max(before, 1):.1f}%)"
             )
+
+        # ── Deterministic train/val split for non-test splits ──────────
+        if split in ('train', 'val') and val_fraction > 0.0:
+            rng = np.random.default_rng(val_seed)
+            idx = np.arange(len(all_names))
+            rng.shuffle(idx)
+            n_val = int(round(len(all_names) * val_fraction))
+            val_idx = set(idx[:n_val].tolist())
+
+            if split == 'val':
+                self.sample_names = [all_names[i] for i in sorted(val_idx)]
+            else:  # 'train'
+                self.sample_names = [
+                    all_names[i] for i in range(len(all_names)) if i not in val_idx
+                ]
+            print(
+                f"[{split}] val_fraction={val_fraction} (seed={val_seed}): "
+                f"{len(self.sample_names)} samples"
+            )
+        else:
+            self.sample_names = all_names
 
     # ------------------------------------------------------------------
     def __len__(self):
@@ -206,25 +251,29 @@ def make_piw3d_dataloader(
     max_persons: int = 3,
     shuffle=None,
     single_person_only: bool = False,
+    val_fraction: float = 0.0,
+    val_seed: int = 42,
 ) -> DataLoader:
     """Build a DataLoader for Person-in-WiFi 3D.
 
     Args:
         data_root:          Path to the ``Person-in-WiFi-3D`` root directory.
-        split:              ``'train'`` or ``'test'``.
+        split:              ``'train'``, ``'val'``, or ``'test'``.
         batch_size:         Samples per batch.
         num_workers:        Worker processes for data loading.
-                            On Windows set to 0 if multiprocessing errors occur.
         max_persons:        Maximum persons per sample (pads shorter ones).
-        shuffle:            Defaults to True for train, False for test.
-        single_person_only: If True, only samples with exactly 1 person are
-                            included.  Used for restricted VST-Pose runs.
+        shuffle:            Defaults to True for train, False for val/test.
+        single_person_only: If True, only samples with exactly 1 person.
+        val_fraction:       Fraction of the training list to hold out as validation.
+        val_seed:           Seed for the deterministic train/val split.
     """
     dataset = PersonInWiFi3DDataset(
         data_root,
         split=split,
         max_persons=max_persons,
         single_person_only=single_person_only,
+        val_fraction=val_fraction,
+        val_seed=val_seed,
     )
     if shuffle is None:
         shuffle = (split == 'train')

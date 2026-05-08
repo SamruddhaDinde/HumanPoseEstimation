@@ -25,6 +25,14 @@ dataset_root: /workspace/Person-in-WiFi-3D
 max_persons: 1
 single_person_only: true
 
+# ── Train / Val / Test protocol ─────────────────────────────────────────
+# PiW3D ships with only train and test splits.  We carve a deterministic
+# 10% slice of the training set as a held-out validation set used to
+# select the best checkpoint.  The test set is touched only once, by
+# Eval_PiW3D.py, after training completes.
+val_fraction: 0.10
+val_seed: 42
+
 # ── Model architecture ──────────────────────────────────────────────────
 # Number of WiFi packets per CSI segment — must match the dataset value.
 num_packets: 20
@@ -46,7 +54,10 @@ alpha: 0.0
 # ── Data loading ────────────────────────────────────────────────────────
 train_loader:
   batch_size: 64
-  # Set num_workers to 0 on Windows if multiprocessing errors occur.
+  num_workers: 4
+
+val_loader:
+  batch_size: 32
   num_workers: 4
 
 test_loader:
@@ -56,7 +67,7 @@ test_loader:
 # ── Training ────────────────────────────────────────────────────────────
 init_rand_seed: 42
 base_learning_rate: 0.0001
-total_epoch: 50
+total_epoch: 80
 
 # ── Output ──────────────────────────────────────────────────────────────
 save_path: pose_weights

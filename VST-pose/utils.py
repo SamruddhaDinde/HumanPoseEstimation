@@ -220,3 +220,34 @@ def calulate_error(preds, gts, align=False):
     pampjpe = pampjpe.mean(1)
 
     return mpjpe, pampjpe, mpjpe_joints, pampjpe_joints
+
+
+def calculate_per_axis_error(preds, gts, axis_order=('h', 'v', 'd')):
+    """Per-axis Mean Per Joint Dimension Location Error (MPJDLE).
+
+    Reports L1 error along each coordinate axis separately.  Matches the
+    metric defined in the Person-in-WiFi 3D paper (Eq. 8) and mmPose-NLP.
+
+    Args:
+        preds:      (N, num_joints, 3) numpy array of predicted keypoints
+        gts:        (N, num_joints, 3) numpy array of ground-truth keypoints
+        axis_order: 3-tuple naming each of the three axes — defaults to
+                    ('h', 'v', 'd') = (horizontal, vertical, depth).
+                    For PiW3D the conventional mapping is x=horizontal,
+                    y=vertical, z=depth — adjust if your dataset differs.
+
+    Returns:
+        dict with keys 'mpjpe_<axis>' for each axis (mean L1 error in the
+        same units as the inputs, averaged across joints and samples).
+    """
+    assert preds.shape == gts.shape
+    assert preds.shape[-1] == 3
+    assert len(axis_order) == 3
+
+    # |pred - gt| along each axis: (N, num_joints, 3)
+    abs_err = np.abs(preds - gts)
+
+    # Mean across joints and samples → one scalar per axis
+    per_axis_mean = abs_err.mean(axis=(0, 1))   # (3,)
+
+    return {f'mpjpe_{axis_order[i]}': float(per_axis_mean[i]) for i in range(3)}
