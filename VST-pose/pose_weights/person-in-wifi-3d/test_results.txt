@@ -1,0 +1,24 @@
+VST-Pose on Person-in-WiFi-3D — Final Test-Set Results
+============================================================
+Checkpoint  : /workspace/pose_weights/person-in-wifi-3d/best_mpjpe.pth
+Config file : /workspace/config/config_piw3d.yaml
+Mode        : SINGLE-PERSON
+Test samples: 2586
+------------------------------------------------------------
+Test loss     : 0.0100
+MPJPE         : 113.6090 mm
+PA-MPJPE      : 70.3921 mm
+MPJPE-H       : 52.5050 mm
+MPJPE-V       : 61.6601 mm
+MPJPE-D       : 50.9976 mm
+PCK@50        : 99.2820
+PCK@40        : 98.5594
+PCK@30        : 97.1332
+PCK@20        : 92.8432
+PCK@10        : 77.3930
+
+Notes:
+ - PCK uses bbox-diagonal scale (joint-order independent),
+   not directly comparable to papers that use torso scale.
+ - Numbers above are computed on the full PiW3D test list
+   (after single_person filtering).

@@ -1,0 +1,18 @@
+Best Results Summary (validation set)
+==================================================
+Best val_loss:  0.0063
+Best MPJPE:     94.4838 mm
+Best PA-MPJPE:  59.9294 mm
+Best MPJPE-H:   43.7377 mm
+Best MPJPE-V:   50.8634 mm
+Best MPJPE-D:   43.5244 mm
+Best PCK@50:   99.7253
+Best PCK@40:   99.4351
+Best PCK@30:   98.6382
+Best PCK@20:   96.0187
+Best PCK@10:   82.9194
+
+Note: numbers above are best per-metric across all
+epochs on the held-out VALIDATION split.  Final
+test-set numbers come from running Eval_PiW3D.py
+against best_mpjpe.pth.
